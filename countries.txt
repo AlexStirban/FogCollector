@@ -1,0 +1,43 @@
+spain
+portugal
+france
+ireland
+united kingdom
+belgium
+netherlands
+germany
+czech republic
+austria
+italy
+croatia
+hungary
+serbia
+slovakia
+poland
+denmark
+norway
+sweden
+switzerland
+slovenia
+bosnia and herzegovina
+albania
+greece
+montenegro
+bulgaria
+romania
+macedonia
+turkey
+cyprus
+ukraine
+moldova
+lithuania
+latvia
+estonia
+finland
+morocco
+tunisia
+algeria
+egypt
+libya
+israel
+syria
