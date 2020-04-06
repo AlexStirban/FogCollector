@@ -157,9 +157,9 @@ def main():
     # arguments
     parser.add_argument('-c', '--countries', type=str, required=True,
                         help='txt file with countries separated by a newline')
-    parser.add_argument('-s', '--start', type=datetime.datetime.fromisoformat, required=True,
+    parser.add_argument('-s', '--start', type=lambda d: datetime.datetime.strptime(d, '%Y-%m-%d'), required=True,
                         help='starting day in ISO format: yyyy-mm-dd')
-    parser.add_argument('-e', '--end', type=datetime.datetime.fromisoformat, required=True,
+    parser.add_argument('-e', '--end', type=lambda d: datetime.datetime.strptime(d, '%Y-%m-%d'), required=True,
                         help='ending day in ISO format: yyyy-mm-dd')
     parser.add_argument('-d', '--delta', type=int, required=True,
                         help='increment of time for every netCDF')
