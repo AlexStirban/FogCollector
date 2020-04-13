@@ -7,6 +7,7 @@ data realated to the presence of fog. Requieres Python >= 3.6. An example txt fi
 * `netcdf4 1.5.3`
 * `xarray 0.15.0`
 * `requests 2.25.0`
+* `tqdm 4.44.1`
 
 # Usage Example
 If one would want to request data from 2020-01-01 to 2020-01-02, where the netCDF4 files are generated 

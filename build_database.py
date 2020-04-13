@@ -6,10 +6,17 @@ import netCDF4
 import argparse
 import csv
 import warnings
+import multiprocessing
 
+from tqdm import tqdm
 from Station import parse_stations
 from Metar import MinMetar
 from Utils import download_IEM_METARS
+
+
+# auxiliar function used to unpack args for imap
+def unpack_args(args):
+    download_IEM_METARS(*args)
 
 
 # Function used to download all the available METAR entries in a range of time
@@ -18,23 +25,33 @@ def download_country_METARS(countries, start, end, verbose=False):
     metars_path = pathlib.Path(__file__).resolve().parent / pathlib.PurePath('temp_metars')
     metars_path.mkdir(parents=True, exist_ok=True)
 
-    # download metar files in that path
+    # Save parsed stations for later
+    stat_dict = dict()
+    args = []
+
+    # prepare arrays
     for country in countries:
         stations = parse_stations(lambda e: e.country == country)
         icaos = [station.icao for station in stations]
 
-        if icaos:
-            download_IEM_METARS(icaos, start, end, str(metars_path / pathlib.PurePath(country)))
+        # build args for thread pool
+        args.append((icaos, start, end, str(metars_path / pathlib.PurePath(country))))
 
-            if verbose:
-                print(f'Downloaded {country} METAR data')
+        # Update our dict
+        stat_dict.update(dict(zip(icaos, stations)))
 
-        else:
-            print(f'No ICAO codes were found for {country}.')
+    # download metar files in that path
+    with multiprocessing.Pool(processes=15) as pool:
+        for _ in tqdm(pool.imap_unordered(unpack_args, args), total=len(args),
+                      disable=not verbose, desc="Downloading METARS"):
+            pass
+
+    return stat_dict
 
 
 # Function used to process the downloaded METARS into netCDF4 files
-def process_metars(start: datetime.datetime, end: datetime.datetime, dt: datetime.timedelta, verbose=False):
+def process_metars(start: datetime.datetime, end: datetime.datetime, dt: datetime.timedelta,
+                   icao_dict=None, verbose=False):
     # get raw metars files
     metars_path = (pathlib.Path(__file__).resolve().parent / pathlib.PurePath('temp_metars')).glob('**/*')
     filenames = [x for x in metars_path if x.is_file()]
@@ -44,7 +61,12 @@ def process_metars(start: datetime.datetime, end: datetime.datetime, dt: datetim
     netcdfs_path.mkdir(parents=True, exist_ok=True)
     mid = start
 
-    while mid <= end:
+    # progress bar
+    pbar = tqdm(total=(end - start).total_seconds() / dt.total_seconds(),
+                desc=start.strftime("Processing %Y-%m-%d %H:%M:%SZ"),
+                disable=not verbose)
+
+    while mid < end:
         df = pd.DataFrame()
 
         for filename in filenames:
@@ -57,9 +79,15 @@ def process_metars(start: datetime.datetime, end: datetime.datetime, dt: datetim
                     date = datetime.datetime.strptime(row[1], '%Y-%m-%d %H:%M')
                     metar = MinMetar(row[2], date.year, date.month)
 
-                    # add only all the needed data is parsed
+                    if date > mid:
+                        break
+
+                    # add only if all the needed data is parsed
                     if date == mid and not metar.missing:
-                        geo = parse_stations(lambda e: e.icao == metar.icao)[0]
+                        if icao_dict is None:
+                            geo = parse_stations(lambda e: e.icao == metar.icao)[0]
+                        else:
+                            geo = icao_dict[metar.icao]
 
                         df = df.append(dict(time=metar.date, lat=geo.lat, lon=geo.lon, zm=metar.vis,
                                             alt=geo.alt, dd=metar.w_dir, ff=metar.w_speed, temp=metar.temp,
@@ -72,9 +100,9 @@ def process_metars(start: datetime.datetime, end: datetime.datetime, dt: datetim
             df.set_index(['time', 'station_name'], inplace=True)
             df_to_netCDF4(df, str(path))
 
-            if verbose:
-                percent = 100 * (1 - (end - mid).total_seconds() / (end - start).total_seconds())
-                print(mid.strftime("%Y%m%dT%H%M%SZ.nc") + f' with {len(df.index)} metars - {percent: .2f}%')
+        if verbose:
+            pbar.set_description(mid.strftime("Processing %Y-%m-%d %H:%M:%SZ"))
+            pbar.update(1)
 
         mid += dt
 
@@ -175,11 +203,10 @@ def main():
             c = [x.replace('\n', '') for x in f.readlines()]
             c = list(dict.fromkeys(c))
 
-            print('Downloading METARS...')
-            download_country_METARS(c, r.start, r.end, r.verbose)
+            icao_dict = download_country_METARS(c, r.start, r.end, r.verbose)
 
-            print('\nProcessing METARS...')
-            process_metars(r.start, r.end, datetime.timedelta(minutes=r.delta), r.verbose)
+            print("Processing METARS")
+            process_metars(r.start, r.end, datetime.timedelta(minutes=r.delta), icao_dict, r.verbose)
 
     except FileNotFoundError as fnferr:
         print(fnferr)
