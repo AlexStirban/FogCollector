@@ -7,6 +7,8 @@ import argparse
 import csv
 import warnings
 import multiprocessing
+import os
+import sys
 
 from tqdm import tqdm
 from Station import parse_stations
@@ -64,7 +66,7 @@ def process_metars(start: datetime.datetime, end: datetime.datetime, dt: datetim
     # progress bar
     pbar = tqdm(total=(end - start).total_seconds() / dt.total_seconds(),
                 desc=start.strftime("Processing %Y-%m-%d %H:%M:%SZ"),
-                disable=not verbose)
+                disable=not verbose, file=sys.stdout)
 
     while mid < end:
         df = pd.DataFrame()
@@ -105,6 +107,15 @@ def process_metars(start: datetime.datetime, end: datetime.datetime, dt: datetim
             pbar.update(1)
 
         mid += dt
+
+    #Cleanup temp METARS
+    if verbose:
+        pbar.close()
+        print('\nCleaning temp METARS...')
+        pass
+
+    for f in filenames:
+        os.remove(f)
 
 
 # xarray overwrites some attributes, going agains CF convention
@@ -190,7 +201,7 @@ def main():
     parser.add_argument('-e', '--end', type=lambda d: datetime.datetime.strptime(d, '%Y-%m-%d'), required=True,
                         help='ending day in ISO format: yyyy-mm-dd')
     parser.add_argument('-d', '--delta', type=int, required=True,
-                        help='increment of time for every netCDF')
+                        help='increment of time for every netCDF in mins')
     parser.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='output info of the current state of the program')
 
@@ -207,6 +218,8 @@ def main():
 
             print("Processing METARS")
             process_metars(r.start, r.end, datetime.timedelta(minutes=r.delta), icao_dict, r.verbose)
+
+            print("Done!")
 
     except FileNotFoundError as fnferr:
         print(fnferr)
